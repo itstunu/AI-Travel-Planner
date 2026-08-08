@@ -1,5 +1,7 @@
 import mysql.connector
 from mysql.connector import Error
+import os
+import streamlit as st
 
 class Database:
     def __init__(self):
@@ -8,30 +10,58 @@ class Database:
     
     def connect_db(self):
         try:
-            self.db_connection = mysql.connector.connect(
-                host='localhost',
-                user='root',
-                password='',
-                database='travel_ai'
-            )
+            # Try to get database credentials from environment variables (Streamlit Cloud secrets)
+            # or fallback to local development values
+            
+            # For Streamlit Cloud, use secrets
+            if hasattr(st, 'secrets') and 'mysql' in st.secrets:
+                db_config = {
+                    'host': st.secrets.mysql.host,
+                    'user': st.secrets.mysql.user,
+                    'password': st.secrets.mysql.password,
+                    'database': st.secrets.mysql.database,
+                    'port': st.secrets.mysql.get('port', 3306)
+                }
+            else:
+                # Local development
+                db_config = {
+                    'host': os.getenv('DB_HOST', 'localhost'),
+                    'user': os.getenv('DB_USER', 'root'),
+                    'password': os.getenv('DB_PASSWORD', ''),
+                    'database': os.getenv('DB_NAME', 'travel_ai')
+                }
+            
+            self.db_connection = mysql.connector.connect(**db_config)
+            
             if self.db_connection.is_connected():
-                print("Connected to MySQL database")
+                print(f"Connected to MySQL database at {db_config['host']}")
+                
         except Error as db_error:
             print(f"Error connecting to MySQL: {db_error}")
+            # Re-raise to handle in the calling code
+            raise
     
     def get_cities(self):
-        db_cursor = self.db_connection.cursor(dictionary=True)
-        db_cursor.execute("SELECT * FROM cities ORDER BY name")
-        city_list = db_cursor.fetchall()
-        db_cursor.close()
-        return city_list
+        try:
+            db_cursor = self.db_connection.cursor(dictionary=True)
+            db_cursor.execute("SELECT * FROM cities ORDER BY name")
+            city_list = db_cursor.fetchall()
+            db_cursor.close()
+            return city_list
+        except Error as db_error:
+            print(f"Error fetching cities: {db_error}")
+            return []
     
     def get_routes(self):
-        db_cursor = self.db_connection.cursor(dictionary=True)
-        db_cursor.execute("SELECT * FROM routes")
-        route_list = db_cursor.fetchall()
-        db_cursor.close()
-        return route_list
+        try:
+            db_cursor = self.db_connection.cursor(dictionary=True)
+            db_cursor.execute("SELECT * FROM routes ORDER BY source, destination")
+            route_list = db_cursor.fetchall()
+            db_cursor.close()
+            return route_list
+        except Error as db_error:
+            print(f"Error fetching routes: {db_error}")
+            return []
     
     def add_city(self, city_name):
         try:
